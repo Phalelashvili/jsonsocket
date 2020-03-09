@@ -25,10 +25,10 @@ class Server(object):
     def __init__(self, host, port):
         self.socket = socket.socket()
         self.socket.bind((host, port))
-        self.host=host
-        self.port=port
+        self.host = host
+        self.port = port
         self.socket.listen(self.backlog)
-        self.__accepting=False
+        self.__accepting = False
 
     def __del__(self):
         self.close()
@@ -38,7 +38,7 @@ class Server(object):
         return self.client is not None
 
     @property
-    def accepting_connexions(self):
+    def accepting_connections(self):
         return self.__accepting
 
     def accept(self):
@@ -72,7 +72,8 @@ class Server(object):
             self.client.close()
             self.client = None
         if self.socket:
-            if self.accepting_connexions:
+            # if self.accepting_connections:
+            if self.__accepting:
                 c = Client()
                 c.connect("localhost", self.port)
                 c.close()
@@ -153,11 +154,10 @@ class ServerAsync(Thread):
 
     def run(self):
         try:
-            self.__running = True
-
             while self.__running:
                 self.server.accept()
-                if not self.__running: break
+                if not self.__running:
+                    break
                 client_addr = self.server.client_addr
                 if self.new_client_callback:
                     self.new_client_callback(client_addr, self)
@@ -196,3 +196,66 @@ class ServerAsync(Thread):
         self.stop()
         self.server.close()
         self.join()
+
+
+class ClientAsync(Thread):
+    def __init__(self, new_message_callback, host_disconnect_callback=None,
+                 exception_callback=None):
+        super(ClientAsync, self).__init__()
+        self.exception_callback = exception_callback
+        self.host_disconnect_callback = host_disconnect_callback
+        self.new_message_callback = new_message_callback
+        self.__running = True
+
+    def connect(self, host, port):
+        self.host_addr = (host, port)
+        self._client = Client()
+        return self._client.connect(host, port)
+
+    def stop(self):
+        self.__running = False
+        self._client.close()
+
+    def run(self):
+        try:
+            while self.__running:
+                while 1:
+                    try:
+                        data = self._client.recv()
+                    except (NoClient, socket.error):
+                        break
+                    if data is not None:
+                        self.new_message_callback(data, self)
+                    else:
+                        break
+                if self.host_disconnect_callback:
+                    self.host_disconnect_callback(self.host_addr, self)
+        except Exception as e:
+            if self.exception_callback:
+                self.exception_callback(e)
+            else:
+                raise
+
+    def send(self, data):
+        self._client.send(data)
+
+    @property
+    def client_addr(self):
+        return self._client.client_addr
+
+    @property
+    def client(self):
+        return self._client.client
+
+    def __enter__(self):
+        self.start()
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop()
+        self._client.close()
+        self.join()
+
+    def close(self):
+        if self._client.socket:
+            self._client.socket.close()
+            self._client.socket = None
