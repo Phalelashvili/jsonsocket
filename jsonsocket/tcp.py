@@ -101,11 +101,14 @@ class Client(object):
 
     socket = None
 
+    def __init__(self, timeout=3):
+        self.socket = socket.socket()
+        self.socket.settimeout(timeout)
+
     def __del__(self):
         self.close()
 
     def connect(self, host, port):
-        self.socket = socket.socket()
         self.socket.connect((host, port))
         return self
 
