@@ -101,9 +101,8 @@ class Client(object):
 
     socket = None
 
-    def __init__(self, timeout=3):
+    def __init__(self):
         self.socket = socket.socket()
-        self.socket.settimeout(timeout)
 
     def __del__(self):
         self.close()
