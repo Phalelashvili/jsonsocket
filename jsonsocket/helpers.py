@@ -54,7 +54,7 @@ def receive(socket, socket_type="tcp", timeout=None, skip_size_info=False):
             socket.settimeout(timeout)
         try:
             char, addr = socket.recvfrom(2048 ** 2)
-            if type(char)==bytes:
+            if type(char) == bytes:
                 char = char.decode("utf-8")
             try:
                 if not skip_size_info:

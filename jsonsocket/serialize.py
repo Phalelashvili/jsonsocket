@@ -2,24 +2,24 @@ import json
 import struct
 from base64 import b64encode, b64decode
 
-use_numpy, use_pandas = True, True
 try:
     import numpy as np
 except ImportError:
-    use_numpy = False
+    np = None
 
 try:
     import pandas as pd
 except ImportError:
-    use_pandas = False
+    pd = None
 
 complex_number_length = len(b64encode(struct.pack("ff", 0, 0)).decode("utf-8")) + 1
-complex1 = np.array([1, 1j])
+if np is not None:
+    complex1 = np.array([1, 1j])
 
 
 class BetterEncoder(json.JSONEncoder):
     def default(self, obj):
-        if use_numpy and isinstance(obj, np.ndarray):
+        if np is not None and isinstance(obj, np.ndarray):
             if "complex" in str(obj.dtype):
                 shape = obj.shape
                 values = obj.ravel()
@@ -28,8 +28,7 @@ class BetterEncoder(json.JSONEncoder):
                 res = dict(_decode_type="numpy_complex", _shape=shape, _content=encoded)
                 return res
             return obj.tolist()
-
-        if use_pandas:
+        if pd is not None and np is not None:
             typename = obj.__class__.__name__
             res = None
             if isinstance(obj, pd.DataFrame):
@@ -43,11 +42,11 @@ class BetterEncoder(json.JSONEncoder):
                 res = dict(_decode_type=typename, _content=obj.to_dict())
             if res:
                 return res
-        if "int" == type(obj).__name__[:3]:
+        if type(obj) == int:
             return int(obj)
-        if "float" == type(obj).__name__[:5]:
+        elif type(obj) == float:
             return float(obj)
-        if "complex" == type(obj).__name__[:7]:
+        elif type(obj) == complex and np is not None:
             encoded = b64encode(struct.pack("ff", np.real(obj), np.imag(obj)))
             encoded = "c" + encoded.decode("utf-8")
             return encoded
@@ -57,6 +56,9 @@ class BetterEncoder(json.JSONEncoder):
 class BetterDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
         super(BetterDecoder, self).__init__(object_hook=self.default, *args, **kwargs)
+
+    def invalid_type(self):
+        raise Exception("invalid _decode_type")
 
     def default(self, obj):
         if type(obj) == str and len(obj) == complex_number_length and obj[0] == "c":
@@ -68,12 +70,13 @@ class BetterDecoder(json.JSONDecoder):
             content = struct.unpack("f" * (len(content) // 4), content)
             content = np.reshape(content, (-1, 2))
             content = content * complex1[None, :]
-            content = np.sum(content,axis=1)
+            content = np.sum(content, axis=1)
             content = np.reshape(content, shape)
             return content
-        if use_pandas and isinstance(obj, dict):
+        if pd is not None and isinstance(obj, dict):
             if "_decode_type" in obj and "_content" in obj:
-                obj = eval("pd.%s(obj[\"_content\"])" % obj["_decode_type"])
+                func = getattr(pd, obj["_decode_type"], self.invalid_type)
+                obj = func(obj["_content"])
         return obj
 
 
