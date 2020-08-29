@@ -46,6 +46,8 @@ class BetterEncoder(json.JSONEncoder):
             return int(obj)
         elif type(obj) == float:
             return float(obj)
+        elif type(obj) == bytes:
+            return dict(_decode_type="bytes", _content=obj.hex())
         elif type(obj) == complex and np is not None:
             encoded = b64encode(struct.pack("ff", np.real(obj), np.imag(obj)))
             encoded = "c" + encoded.decode("utf-8")
@@ -73,6 +75,8 @@ class BetterDecoder(json.JSONDecoder):
             content = np.sum(content, axis=1)
             content = np.reshape(content, shape)
             return content
+        elif "_decode_type" in obj and obj["_decode_type"] == "bytes":
+            return bytes.fromhex(obj["_content"])
         if pd is not None and isinstance(obj, dict):
             if "_decode_type" in obj and "_content" in obj:
                 func = getattr(pd, obj["_decode_type"], self.invalid_type)
