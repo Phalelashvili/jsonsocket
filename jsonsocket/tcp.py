@@ -117,10 +117,15 @@ class Client(object):
         _send(self.socket, data, socket_type="tcp")
         return self
 
-    def recv(self, **kwargs):
+    def recv(self, close_on_timeout=False, **kwargs):
         if not self.socket:
             raise ConnectFirst()
-        return _recv(self.socket, socket_type="tcp", **kwargs)
+        try:
+            return _recv(self.socket, socket_type="tcp", **kwargs)
+        except TimeoutError:
+            if close_on_timeout:
+                self.close()
+            return None
 
     def recv_and_close(self, **kwargs):
         data = self.recv(**kwargs)
@@ -197,16 +202,18 @@ class ServerAsync(Thread):
 
 class ClientAsync(Thread):
     def __init__(self, new_message_callback, host_disconnect_callback=None,
-                 exception_callback=None):
+                 exception_callback=None, timeout=5):
         super(ClientAsync, self).__init__()
+        self.client = Client()
+        self.timeout = timeout
         self.exception_callback = exception_callback
         self.host_disconnect_callback = host_disconnect_callback
         self.new_message_callback = new_message_callback
+        self.host_addr = ()
         self.__running = True
 
     def connect(self, host, port):
         self.host_addr = (host, port)
-        self.client = Client()
         return self.client.connect(host, port)
 
     def stop(self):
@@ -216,28 +223,26 @@ class ClientAsync(Thread):
     def run(self):
         try:
             while self.__running:
-                while 1:
-                    try:
-                        data = self.client.recv()
-                    except (NoClient, socket.error):
-                        break
-                    if data is not None:
-                        self.new_message_callback(data, self)
-                    else:
-                        break
-                if self.host_disconnect_callback:
-                    self.host_disconnect_callback(self.host_addr, self)
+                try:
+                    data = self.client.recv()
+                except (NoClient, socket.error):
+                    break
+                if data is not None:
+                    self.new_message_callback(data, self)
+                else:
+                    break
+            if self.host_disconnect_callback:
+                self.host_disconnect_callback(self.host_addr, self)
         except Exception as e:
-            if self.exception_callback:
-                self.exception_callback(e)
-            else:
+            if not self.exception_callback:
                 raise
+            self.exception_callback(e)
 
     def send(self, data):
         self.client.send(data)
 
     @property
-    def client(self) -> Client:
+    def socket(self) -> Client:
         return self.client.socket
 
     def __enter__(self):
