@@ -206,19 +206,19 @@ class ClientAsync(Thread):
 
     def connect(self, host, port):
         self.host_addr = (host, port)
-        self._client = Client()
-        return self._client.connect(host, port)
+        self.client = Client()
+        return self.client.connect(host, port)
 
     def stop(self):
         self.__running = False
-        self._client.close()
+        self.client.close()
 
     def run(self):
         try:
             while self.__running:
                 while 1:
                     try:
-                        data = self._client.recv()
+                        data = self.client.recv()
                     except (NoClient, socket.error):
                         break
                     if data is not None:
@@ -234,25 +234,21 @@ class ClientAsync(Thread):
                 raise
 
     def send(self, data):
-        self._client.send(data)
+        self.client.send(data)
 
     @property
-    def client_addr(self):
-        return self._client.client_addr
-
-    @property
-    def client(self):
-        return self._client.client
+    def client(self) -> Client:
+        return self.client.socket
 
     def __enter__(self):
         self.start()
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.stop()
-        self._client.close()
+        self.client.close()
         self.join()
 
     def close(self):
-        if self._client.socket:
-            self._client.socket.close()
-            self._client.socket = None
+        if self.client.socket:
+            self.client.socket.close()
+            self.client.socket = None
