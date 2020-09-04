@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import socket
-from threading import Thread
+import threading
 
 from jsonsocket.errors import NoClient, ConnectFirst
 from jsonsocket.helpers import send as _send, receive as _recv, TimeoutError
@@ -138,7 +138,7 @@ class Client(object):
             self.socket = None
 
 
-class ServerAsync(Thread):
+class ServerAsync(threading.Thread):
     def __init__(self, host, port, new_client_callback, new_message_callback, client_disconnect_callback=None,
                  exception_callback=None, timeout=5):
         super(ServerAsync, self).__init__()
@@ -149,6 +149,7 @@ class ServerAsync(Thread):
         self.new_client_callback = new_client_callback
         self.server = Server(host, port)
         self.__running = True
+        self._lock = threading.Lock()
 
     def stop(self):
         self.__running = False
@@ -181,7 +182,9 @@ class ServerAsync(Thread):
                 raise
 
     def send(self, data):
+        self._lock.acquire()
         self.server.send(data)
+        self._lock.release()
 
     @property
     def client_addr(self):
@@ -200,7 +203,7 @@ class ServerAsync(Thread):
         self.join()
 
 
-class ClientAsync(Thread):
+class ClientAsync(threading.Thread):
     def __init__(self, new_message_callback, host_disconnect_callback=None,
                  exception_callback=None, timeout=5):
         super(ClientAsync, self).__init__()
@@ -211,6 +214,7 @@ class ClientAsync(Thread):
         self.new_message_callback = new_message_callback
         self.host_addr = ()
         self.__running = True
+        self._lock = threading.Lock()
 
     def connect(self, host, port):
         self.host_addr = (host, port)
@@ -239,7 +243,9 @@ class ClientAsync(Thread):
             self.exception_callback(e)
 
     def send(self, data):
+        self._lock.acquire()
         self.client.send(data)
+        self._lock.release()
 
     @property
     def socket(self) -> Client:
